@@ -1,0 +1,19 @@
+streamlit==1.31.0
+opencv-python==4.9.0.80
+pillow==10.2.0
+pyzxing==0.2
+pandas==2.1.4
+plotly==5.18.0
+python-barcode==0.15.1
+openpyxl==3.1.2
+tqdm==4.66.1
+numpy==1.26.3
+
+
+# Real-time Video Streaming
+streamlit-webrtc==0.47.1
+av==11.0.0
+
+# Optional: Untuk support lebih banyak format barcode
+# pyzxing==0.2
+# pyzbar==0.1.9
