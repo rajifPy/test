@@ -1,8 +1,7 @@
 """
-BARCODE HANDLER - STREAMLIT-QRCODE-SCANNER VERSION
-Ultra simple barcode scanning menggunakan JavaScript-based scanner
-NO OpenCV, NO dependencies, Works in browser!
-Version: 7.0 - QRCode Scanner Implementation
+BARCODE HANDLER - FIXED RECURSION ERROR
+Scanner dengan preview 400x400 dan color feedback
+Version: 10.0 - No Recursion Loop
 """
 
 import barcode
@@ -34,8 +33,7 @@ print("\n" + "=" * 60)
 if SCANNER_READY:
     print("✅ SCANNER READY: JavaScript-based QRCode Scanner")
     print("   Method: HTML5 getUserMedia API")
-    print("   Formats: QR Code, Code128, EAN, UPC, dan lainnya")
-    print("   Platform: Browser-based (Chrome, Firefox, Safari)")
+    print("   Preview: 400x400 with visual feedback")
 else:
     print("❌ SCANNER NOT AVAILABLE")
     print("   📥 Install: pip install streamlit-qrcode-scanner==0.1.2")
@@ -47,53 +45,184 @@ print()
 if SCANNER_READY:
     def scan_barcode_realtime():
         """
-        Real-time barcode scanner menggunakan streamlit-qrcode-scanner
-        Ultra simple - hanya 3 baris code!
+        Enhanced barcode scanner dengan visual feedback
+        FIXED: No recursion - return barcode_data instead of rerun
         
         Returns:
-            dict: {'success': bool, 'barcode_id': str, 'message': str}
+            str or None: barcode data if detected, None otherwise
         """
-        # Info
-        st.markdown("### 📷 JavaScript Barcode Scanner")
+        # Custom CSS untuk scanner area dengan visual feedback
+        st.markdown("""
+            <style>
+            /* Scanner Container */
+            .stApp [data-testid="stVerticalBlock"] iframe {
+                min-height: 400px !important;
+                min-width: 400px !important;
+                border-radius: 15px;
+            }
+            
+            /* Scanner Frame - Scanning State (Yellow) */
+            .scanner-frame-scanning {
+                border: 5px solid #FFC107;
+                border-radius: 15px;
+                padding: 10px;
+                background: linear-gradient(135deg, #FFF9C4 0%, #FFEB3B 100%);
+                box-shadow: 0 0 20px rgba(255, 193, 7, 0.5);
+                animation: pulse-yellow 1.5s infinite;
+            }
+            
+            /* Scanner Frame - Success State (Green) */
+            .scanner-frame-success {
+                border: 5px solid #4CAF50;
+                border-radius: 15px;
+                padding: 10px;
+                background: linear-gradient(135deg, #C8E6C9 0%, #4CAF50 100%);
+                box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+                animation: pulse-green 0.5s;
+            }
+            
+            /* Scanner Frame - Default State */
+            .scanner-frame-default {
+                border: 3px solid #667eea;
+                border-radius: 15px;
+                padding: 10px;
+                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+            }
+            
+            @keyframes pulse-yellow {
+                0%, 100% { 
+                    box-shadow: 0 0 20px rgba(255, 193, 7, 0.5);
+                    transform: scale(1);
+                }
+                50% { 
+                    box-shadow: 0 0 40px rgba(255, 193, 7, 0.8);
+                    transform: scale(1.02);
+                }
+            }
+            
+            @keyframes pulse-green {
+                0% { 
+                    box-shadow: 0 0 0px rgba(76, 175, 80, 0);
+                    transform: scale(1);
+                }
+                50% { 
+                    box-shadow: 0 0 60px rgba(76, 175, 80, 1);
+                    transform: scale(1.05);
+                }
+                100% { 
+                    box-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
+                    transform: scale(1);
+                }
+            }
+            
+            /* Status Indicator */
+            .scan-status {
+                text-align: center;
+                font-size: 1.2rem;
+                font-weight: bold;
+                padding: 0.5rem;
+                border-radius: 10px;
+                margin-bottom: 1rem;
+            }
+            
+            .scan-status-scanning {
+                background: #FFF9C4;
+                color: #F57F17;
+                border: 2px solid #FFC107;
+            }
+            
+            .scan-status-success {
+                background: #C8E6C9;
+                color: #2E7D32;
+                border: 2px solid #4CAF50;
+            }
+            
+            .scan-status-waiting {
+                background: #E3F2FD;
+                color: #1565C0;
+                border: 2px solid #2196F3;
+            }
+            </style>
+        """, unsafe_allow_html=True)
         
-        # Scan barcode
-        st.markdown("#### 🎯 Scan Barcode")
+        # Initialize scan state
+        if 'scanner_state' not in st.session_state:
+            st.session_state.scanner_state = 'waiting'
         
-        # Call scanner (3 baris aja!)
+        # Initialize last detected barcode
+        if 'last_detected_barcode' not in st.session_state:
+            st.session_state.last_detected_barcode = None
+        
+        # Determine frame class based on state
+        if st.session_state.scanner_state == 'scanning':
+            frame_class = "scanner-frame-scanning"
+            status_class = "scan-status-scanning"
+            status_icon = "🟡"
+            status_text = "SCANNING..."
+        elif st.session_state.scanner_state == 'success':
+            frame_class = "scanner-frame-success"
+            status_class = "scan-status-success"
+            status_icon = "🟢"
+            status_text = "BERHASIL!"
+        else:
+            frame_class = "scanner-frame-default"
+            status_class = "scan-status-waiting"
+            status_icon = "🔵"
+            status_text = "READY"
+        
+        # Status indicator
+        st.markdown(f"""
+            <div class="scan-status {status_class}">
+                <div style="font-size: 2rem; margin-bottom: 0.3rem;">{status_icon}</div>
+                <div>{status_text}</div>
+            </div>
+        """, unsafe_allow_html=True)
+        
+        # Scanner container with visual feedback
+        st.markdown(f'<div class="{frame_class}">', unsafe_allow_html=True)
+        
+        # Call scanner - Library akan tampilkan button dan camera
         barcode_data = qrcode_scanner(key='barcode-scanner')
         
-        # Handle result
+        st.markdown('</div>', unsafe_allow_html=True)
+        
+        # FIXED: Return barcode data instead of calling st.rerun()
         if barcode_data:
-            st.success(f"✅ **BARCODE DETECTED!**")
-            st.code(barcode_data, language="text")
-            
-            # Return result
-            return {
-                'success': True,
-                'barcode_id': barcode_data,
-                'message': f"✅ Scan berhasil: {barcode_data}"
-            }
+            # Only process if it's a NEW barcode (prevent duplicates)
+            if barcode_data != st.session_state.last_detected_barcode:
+                st.session_state.scanner_state = 'success'
+                st.session_state.last_detected_barcode = barcode_data
+                
+                # Success feedback
+                st.success(f"✅ **SCAN BERHASIL!**")
+                st.code(barcode_data, language="text")
+                
+                # Return the barcode data
+                return barcode_data
+            else:
+                # Same barcode, don't process again
+                st.session_state.scanner_state = 'scanning'
+                return None
         else:
-            st.warning("⊙ **WAITING FOR SCAN...**\n\nKlik tombol 'Start Scanning' untuk mulai")
-            
-            return {
-                'success': False,
-                'message': "Scan belum dilakukan atau dibatalkan"
-            }
+            # Set state to scanning when camera active
+            if st.session_state.scanner_state != 'success':
+                st.session_state.scanner_state = 'scanning'
+            return None
 else:
     # Fallback jika library tidak tersedia
     def scan_barcode_realtime():
         """Fallback function"""
-        error_msg = "⚠️ Scanner tidak tersedia.\n\n" + \
-                   "📦 Install library:\n" + \
-                   "   pip install streamlit-qrcode-scanner==0.1.2\n\n" + \
-                   "💡 ALTERNATIF: Gunakan 'Input Manual'"
-        
-        st.error(error_msg)
-        return {
-            'success': False,
-            'message': error_msg
-        }
+        st.error("""
+            ⚠️ **Scanner tidak tersedia**
+            
+            📦 Install library:
+            ```bash
+            pip install streamlit-qrcode-scanner==0.1.2
+            ```
+            
+            💡 **ALTERNATIF:** Gunakan 'Input Manual'
+        """)
+        return None
 
 # ==================== BARCODE GENERATION ====================
 
@@ -147,8 +276,8 @@ def check_scanner_availability():
     """Check and return scanner status"""
     
     if SCANNER_READY:
-        message = "✅ Scanner siap: JavaScript-based QRCode Scanner\n" + \
-                 "   Works in browser, no OpenCV needed!"
+        message = "✅ Scanner siap: 400x400 preview dengan visual feedback\n" + \
+                 "   🟡 Kuning = Scanning | 🟢 Hijau = Berhasil"
     else:
         message = "❌ Install: pip install streamlit-qrcode-scanner==0.1.2"
     
@@ -156,7 +285,7 @@ def check_scanner_availability():
         'available': SCANNER_READY,
         'message': message,
         'method': 'qrcode-scanner-js' if SCANNER_READY else None,
-        'requires_https': True  # For production
+        'requires_https': True
     }
 
 def validate_barcode_format(barcode_id):
@@ -176,9 +305,8 @@ print("📦 Barcode Handler Module Loaded")
 print(f"   Scanner: {'✅ Ready' if SCANNER_READY else '❌ Not Available'}")
 if SCANNER_READY:
     print(f"   Method: JavaScript-based (streamlit-qrcode-scanner)")
-    print(f"   Platform: Browser HTML5 API")
-    print(f"   Formats: QR, Code128, EAN, UPC, Code39, Code93, ITF")
-    print(f"   Note: Requires HTTPS for production deployment")
+    print(f"   Preview: 400x400 with visual feedback")
+    print(f"   Visual: 🟡 Yellow (scanning) | 🟢 Green (success)")
 else:
     print(f"   Install: pip install streamlit-qrcode-scanner==0.1.2")
 print()
