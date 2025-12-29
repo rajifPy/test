@@ -1,8 +1,7 @@
 """
-BARCODE HANDLER - WITH STREAMLIT PREVIEW
-Real-time camera preview di Streamlit (400x400px minimum)
-Status: Success (hijau) / Error (merah)
-Version: 4.0 - Streamlit Preview
+BARCODE HANDLER - FIXED VERSION
+Real-time camera preview dengan IMPROVED DETECTION
+Version: 5.0 - Enhanced Detection
 """
 
 import barcode
@@ -63,14 +62,13 @@ except Exception as e:
             if SCANNER_METHOD is None and OPENCV_AVAILABLE:
                 print("\n[3/3] Checking OpenCV Barcode Detector...")
                 try:
-                    # OpenCV 4.5+ punya barcode module
                     if hasattr(cv2, 'barcode'):
                         detector = cv2.barcode.BarcodeDetector()
                         SCANNER_METHOD = "opencv_barcode"
                         SCANNER_LIB = detector
                         print("✅ OpenCV Barcode: Available (ACTIVE METHOD)")
                     else:
-                        print("⚠️ OpenCV Barcode: Module not available (need opencv-contrib)")
+                        print("⚠️ OpenCV Barcode: Module not available")
                 except Exception as e:
                     print(f"⚠️ OpenCV Barcode: {e}")
 
@@ -80,32 +78,43 @@ WEBCAM_AVAILABLE = OPENCV_AVAILABLE and SCANNER_METHOD is not None
 print("\n" + "=" * 60)
 if WEBCAM_AVAILABLE:
     print(f"✅ SCANNER READY: {SCANNER_METHOD.upper()}")
-    if SCANNER_METHOD == "pyzxing":
-        print("   📡 Menggunakan API online (butuh internet)")
-        print("   🌐 Akan auto-download JAR file jika belum ada")
 else:
     print("❌ SCANNER NOT AVAILABLE")
-    if SCANNER_ERROR:
-        print(f"   Error: {SCANNER_ERROR}")
-    print("\n   📥 SOLUSI:")
-    print("   1. Install pyzxing: pip install pyzxing")
-    print("   2. Pastikan internet aktif (untuk download JAR)")
-    print("   3. Atau install pyzbar: pip install pyzbar")
 print("=" * 60)
 print()
 
-# ==================== SCANNING METHODS ====================
+# ==================== ENHANCED SCANNING METHODS ====================
 
 def scan_frame_pyzxing(frame, temp_path="temp_scan.jpg"):
-    """Scan using pyzxing (Internet-based API)"""
+    """Scan using pyzxing - ENHANCED with preprocessing"""
     try:
-        cv2.imwrite(temp_path, frame)
+        # Try 1: Original frame
+        cv2.imwrite(temp_path, frame, [cv2.IMWRITE_JPEG_QUALITY, 95])
         results = reader.decode(temp_path)
-        
         if results and len(results) > 0:
             barcode_data = results[0].get('parsed', None)
             if barcode_data:
                 return barcode_data
+        
+        # Try 2: Grayscale with high contrast
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        enhanced = cv2.convertScaleAbs(gray, alpha=1.5, beta=20)
+        cv2.imwrite(temp_path, enhanced, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        results = reader.decode(temp_path)
+        if results and len(results) > 0:
+            barcode_data = results[0].get('parsed', None)
+            if barcode_data:
+                return barcode_data
+        
+        # Try 3: Denoised
+        denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
+        cv2.imwrite(temp_path, denoised, [cv2.IMWRITE_JPEG_QUALITY, 95])
+        results = reader.decode(temp_path)
+        if results and len(results) > 0:
+            barcode_data = results[0].get('parsed', None)
+            if barcode_data:
+                return barcode_data
+        
         return None
         
     except Exception as e:
@@ -121,11 +130,51 @@ def scan_frame_pyzxing(frame, temp_path="temp_scan.jpg"):
                 pass
 
 def scan_frame_pyzbar(frame):
-    """Scan using pyzbar (Local library)"""
+    """Scan using pyzbar - ULTRA ENHANCED with multiple preprocessing"""
     try:
+        # 1. Try original frame
         decoded_objects = pyzbar_decode(frame)
         if decoded_objects:
             return decoded_objects[0].data.decode('utf-8')
+        
+        # 2. Convert to grayscale
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        decoded_objects = pyzbar_decode(gray)
+        if decoded_objects:
+            return decoded_objects[0].data.decode('utf-8')
+        
+        # 3. Adaptive threshold
+        thresh = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C, 
+                                       cv2.THRESH_BINARY, 11, 2)
+        decoded_objects = pyzbar_decode(thresh)
+        if decoded_objects:
+            return decoded_objects[0].data.decode('utf-8')
+        
+        # 4. OTSU threshold
+        _, otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)
+        decoded_objects = pyzbar_decode(otsu)
+        if decoded_objects:
+            return decoded_objects[0].data.decode('utf-8')
+        
+        # 5. Enhanced contrast
+        enhanced = cv2.convertScaleAbs(gray, alpha=1.5, beta=30)
+        decoded_objects = pyzbar_decode(enhanced)
+        if decoded_objects:
+            return decoded_objects[0].data.decode('utf-8')
+        
+        # 6. Denoising
+        denoised = cv2.fastNlMeansDenoising(gray, None, 10, 7, 21)
+        decoded_objects = pyzbar_decode(denoised)
+        if decoded_objects:
+            return decoded_objects[0].data.decode('utf-8')
+        
+        # 7. Sharpen
+        kernel = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+        sharpened = cv2.filter2D(gray, -1, kernel)
+        decoded_objects = pyzbar_decode(sharpened)
+        if decoded_objects:
+            return decoded_objects[0].data.decode('utf-8')
+        
         return None
     except Exception as e:
         print(f"Pyzbar error: {e}")
@@ -152,13 +201,10 @@ def scan_frame(frame):
         return scan_frame_opencv(frame)
     return None
 
-# ==================== STREAMLIT PREVIEW SCANNER ====================
+# ==================== ENHANCED OVERLAY ====================
 
 def draw_scan_overlay(frame, status="scanning", barcode_data=None):
-    """
-    Draw overlay on frame for Streamlit preview
-    Status: scanning (kuning), detected (hijau), error (merah)
-    """
+    """Draw overlay - LARGER SCAN AREA"""
     height, width = frame.shape[:2]
     frame_copy = frame.copy()
     
@@ -173,9 +219,9 @@ def draw_scan_overlay(frame, status="scanning", barcode_data=None):
         color = (0, 255, 255)  # Yellow
         status_text = "⊙ SCANNING..."
     
-    # Scan area (center, 60% of frame)
-    scan_w = int(width * 0.6)
-    scan_h = int(height * 0.4)
+    # LARGER SCAN AREA (80% x 60% instead of 60% x 40%)
+    scan_w = int(width * 0.8)
+    scan_h = int(height * 0.6)
     scan_x = (width - scan_w) // 2
     scan_y = (height - scan_h) // 2
     
@@ -187,16 +233,16 @@ def draw_scan_overlay(frame, status="scanning", barcode_data=None):
     mask = np.zeros((height, width), dtype=np.uint8)
     cv2.rectangle(mask, (scan_x, scan_y), (scan_x + scan_w, scan_y + scan_h), 255, -1)
     
-    # Apply overlay (50% transparency)
-    frame_copy = cv2.addWeighted(overlay, 0.4, frame_copy, 0.6, 0)
+    # Apply overlay (30% transparency - lighter)
+    frame_copy = cv2.addWeighted(overlay, 0.3, frame_copy, 0.7, 0)
     frame_copy = np.where(mask[:, :, np.newaxis] == 255, frame, frame_copy)
     
-    # Draw scan area border
-    cv2.rectangle(frame_copy, (scan_x, scan_y), (scan_x + scan_w, scan_y + scan_h), color, 3)
+    # Draw scan area border (thicker)
+    cv2.rectangle(frame_copy, (scan_x, scan_y), (scan_x + scan_w, scan_y + scan_h), color, 4)
     
-    # Corner markers
-    corner_len = 40
-    corner_thick = 4
+    # Corner markers (larger)
+    corner_len = 50
+    corner_thick = 5
     
     # Top-left
     cv2.line(frame_copy, (scan_x, scan_y), (scan_x + corner_len, scan_y), color, corner_thick)
@@ -215,40 +261,45 @@ def draw_scan_overlay(frame, status="scanning", barcode_data=None):
     if status == "scanning":
         animation = int((scan_h // 2) + (scan_h * 0.3 * np.sin(time.time() * 4)))
         scan_line_y = scan_y + animation
-        cv2.line(frame_copy, (scan_x, scan_line_y), (scan_x + scan_w, scan_line_y), color, 2)
+        cv2.line(frame_copy, (scan_x, scan_line_y), (scan_x + scan_w, scan_line_y), color, 3)
     
     # Status bar at top
-    bar_h = 60
+    bar_h = 70
     cv2.rectangle(frame_copy, (0, 0), (width, bar_h), (30, 30, 30), -1)
     
-    # Status text
-    text_size = cv2.getTextSize(status_text, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
+    # Status text (larger)
+    text_size = cv2.getTextSize(status_text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 3)[0]
     text_x = (width - text_size[0]) // 2
-    cv2.putText(frame_copy, status_text, (text_x, 38), 
-               cv2.FONT_HERSHEY_SIMPLEX, 0.8, color, 2)
+    cv2.putText(frame_copy, status_text, (text_x, 45), 
+               cv2.FONT_HERSHEY_SIMPLEX, 1.0, color, 3)
     
     # Barcode result (if detected)
     if status == "detected" and barcode_data:
-        # Result box at bottom
-        result_h = 70
+        result_h = 80
         result_y = height - result_h
         cv2.rectangle(frame_copy, (0, result_y), (width, height), (0, 200, 0), -1)
-        cv2.rectangle(frame_copy, (0, result_y), (width, height), (0, 255, 0), 3)
+        cv2.rectangle(frame_copy, (0, result_y), (width, height), (0, 255, 0), 4)
         
-        # Barcode text
         text = f"BARCODE: {barcode_data}"
-        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 0.9, 2)[0]
+        text_size = cv2.getTextSize(text, cv2.FONT_HERSHEY_SIMPLEX, 1.0, 3)[0]
         text_x = (width - text_size[0]) // 2
-        cv2.putText(frame_copy, text, (text_x, result_y + 45), 
-                   cv2.FONT_HERSHEY_SIMPLEX, 0.9, (255, 255, 255), 2)
+        cv2.putText(frame_copy, text, (text_x, result_y + 50), 
+                   cv2.FONT_HERSHEY_SIMPLEX, 1.0, (255, 255, 255), 3)
     
     return frame_copy
 
+# ==================== FIXED REAL-TIME SCANNER ====================
+
 def scan_barcode_realtime():
     """
-    Real-time barcode scanner dengan Streamlit preview
-    Minimum preview size: 400x400px
-    Status colors: Success (hijau), Error (merah), Scanning (kuning)
+    FIXED VERSION: More responsive and sensitive barcode detection
+    
+    IMPROVEMENTS:
+    - Scan every 2 frames (instead of 5)
+    - No delay between scans
+    - Larger scan area (80% x 60%)
+    - Preprocessing for better detection
+    - Higher frame rate
     
     Returns:
         dict: {'success': bool, 'barcode_id': str, 'message': str}
@@ -269,11 +320,7 @@ def scan_barcode_realtime():
             error_msg += "   ALTERNATIVE (butuh ZBar DLL):\n"
             error_msg += "   pip install pyzbar\n\n"
         
-        if "404" in SCANNER_ERROR or "download" in SCANNER_ERROR.lower():
-            error_msg += "🔄 Pyzxing sedang download JAR file...\n"
-            error_msg += "   Tunggu 2-5 menit, lalu restart app.\n\n"
-        
-        error_msg += "💡 ALTERNATIF: Gunakan 'Input Manual' (lebih cepat)"
+        error_msg += "💡 ALTERNATIF: Gunakan 'Input Manual'"
         
         st.error(error_msg)
         return {
@@ -284,57 +331,61 @@ def scan_barcode_realtime():
     # Open camera
     cap = cv2.VideoCapture(0)
     
-    # Fallback to camera 1
     if not cap.isOpened():
         cap = cv2.VideoCapture(1)
     
     if not cap.isOpened():
-        error_msg = "❌ Tidak dapat membuka kamera!\n\n" + \
-                    "Pastikan:\n" + \
-                    "1. Webcam terhubung dengan benar\n" + \
-                    "2. Tidak ada aplikasi lain yang pakai webcam\n" + \
-                    "3. Driver webcam terinstall\n" + \
-                    "4. Permission webcam diizinkan"
+        error_msg = "❌ Tidak dapat membuka kamera!"
         st.error(error_msg)
         return {
             'success': False,
             'message': error_msg
         }
     
-    # Camera settings
+    # Camera settings - OPTIMIZED
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+    cap.set(cv2.CAP_PROP_AUTOFOCUS, 1)  # Enable autofocus
+    cap.set(cv2.CAP_PROP_BRIGHTNESS, 128)  # Optimal brightness
     
     # Streamlit UI
     st.markdown("### 📷 Live Camera Preview")
+    st.info("💡 **TIPS DETEKSI:**\n- Pegang barcode 15-20cm dari kamera\n- Pastikan barcode rata (tidak miring)\n- Cahaya cukup terang\n- Tunggu fokus kamera (2-3 detik)")
     
-    # Create columns for layout
     col_preview, col_status = st.columns([2, 1])
     
     with col_preview:
-        # Camera preview placeholder (minimum 400x400)
         camera_placeholder = st.empty()
     
     with col_status:
         status_placeholder = st.empty()
+        tips_placeholder = st.empty()
         result_placeholder = st.empty()
-        button_placeholder = st.empty()
     
-    # Scanner state
+    # Scanner state - ULTRA AGGRESSIVE
     barcode_detected = None
     status = "scanning"
     frame_count = 0
-    scan_interval = 5
-    last_scan_time = 0
-    max_frames = 900  # 30 seconds at 30fps
+    scan_interval = 1  # SCAN EVERY FRAME for maximum detection
+    max_frames = 1500  # 50 seconds at 30fps (increased timeout)
     
-    # Progress bar
+    # Detection history for stability
+    detection_history = []
+    required_confirmations = 1  # Only need 1 reading (faster response)
+    
     progress_bar = st.progress(0)
     
     try:
-        # Initial status
         with status_placeholder:
-            st.info("⊙ **SCANNING...**\n\nArahkan barcode ke area hijau")
+            st.info("⊙ **SCANNING...**\n\nSiapkan barcode Anda")
+        
+        with tips_placeholder:
+            st.markdown("""
+            **Posisi Optimal:**
+            - 📏 Jarak: 15-20cm
+            - 📐 Sudut: Lurus (90°)
+            - 💡 Cahaya: Terang merata
+            """)
         
         while frame_count < max_frames:
             ret, frame = cap.read()
@@ -346,43 +397,45 @@ def scan_barcode_realtime():
             # Mirror frame
             frame = cv2.flip(frame, 1)
             
-            # Resize to at least 400x400 for preview
-            frame_h, frame_w = frame.shape[:2]
-            preview_size = max(400, max(frame_w, frame_h))
-            
-            # Scan logic (throttled)
-            current_time = time.time()
-            
+            # SCAN LOGIC - MORE AGGRESSIVE
             if barcode_detected is None and frame_count % scan_interval == 0:
-                if current_time - last_scan_time >= 0.2:
-                    barcode_data = scan_frame(frame)
-                    last_scan_time = current_time
+                barcode_data = scan_frame(frame)
+                
+                if barcode_data:
+                    # Add to history
+                    detection_history.append(barcode_data)
                     
-                    if barcode_data:
-                        barcode_detected = barcode_data
-                        status = "detected"
-                        
-                        # Update status - GREEN for success
-                        with status_placeholder:
-                            st.success(f"✅ **SUCCESS!**\n\nBarcode: `{barcode_data}`")
-                        
-                        with result_placeholder:
-                            st.balloons()
-                        
-                        # Wait 1 second before closing
-                        time.sleep(1)
-                        break
+                    # Keep only last 3 detections
+                    if len(detection_history) > 3:
+                        detection_history.pop(0)
+                    
+                    # Check if we have consistent readings
+                    if len(detection_history) >= required_confirmations:
+                        # Check if last N readings are the same
+                        if len(set(detection_history[-required_confirmations:])) == 1:
+                            barcode_detected = barcode_data
+                            status = "detected"
+                            
+                            with status_placeholder:
+                                st.success(f"✅ **SUCCESS!**\n\nBarcode: `{barcode_data}`")
+                            
+                            with result_placeholder:
+                                st.balloons()
+                            
+                            # Wait 1 second before closing
+                            time.sleep(1)
+                            break
+                        else:
+                            with tips_placeholder:
+                                st.warning(f"📡 Mendeteksi... ({len(detection_history)}/{required_confirmations})\nPegang steady!")
             
-            # Draw overlay on frame
+            # Draw overlay
             frame_with_overlay = draw_scan_overlay(frame, status, barcode_detected)
             
-            # Convert BGR to RGB for Streamlit
+            # Convert BGR to RGB
             frame_rgb = cv2.cvtColor(frame_with_overlay, cv2.COLOR_BGR2RGB)
-            
-            # Convert to PIL Image
             pil_image = Image.fromarray(frame_rgb)
             
-            # Display in Streamlit (minimum 400x400)
             with camera_placeholder:
                 st.image(pil_image, use_container_width=True, caption="Live Preview")
             
@@ -392,14 +445,14 @@ def scan_barcode_realtime():
             
             frame_count += 1
             
-            # Small delay to prevent high CPU
-            time.sleep(0.03)  # ~30 FPS
+            # REDUCED DELAY for higher FPS
+            time.sleep(0.02)  # ~50 FPS (reduced from 0.03)
         
         # Timeout
         if barcode_detected is None:
             status = "error"
             with status_placeholder:
-                st.error("⏱️ **TIMEOUT**\n\nScan dibatalkan setelah 30 detik")
+                st.error("⏱️ **TIMEOUT**\n\nTidak ada barcode terdeteksi")
     
     except Exception as e:
         status = "error"
@@ -410,7 +463,6 @@ def scan_barcode_realtime():
         traceback.print_exc()
     
     finally:
-        # Cleanup
         cap.release()
         progress_bar.empty()
     
@@ -424,15 +476,16 @@ def scan_barcode_realtime():
     else:
         return {
             'success': False,
-            'message': "⏱️ Scan dibatalkan atau timeout.\n\n" +
+            'message': "⏱️ Scan gagal atau timeout.\n\n" +
                       "💡 Tips:\n" +
                       "- Barcode harus jelas dan fokus\n" +
                       "- Pegang steady 2-3 detik\n" +
-                      "- Pastikan lighting cukup terang\n" +
+                      "- Cahaya cukup terang\n" +
+                      "- Coba atur jarak 15-20cm\n" +
                       "- Atau gunakan Input Manual"
         }
 
-# ==================== BARCODE GENERATION ====================
+# ==================== BARCODE GENERATION (unchanged) ====================
 
 def generate_barcode(barcode_id, product_name):
     """Generate barcode Code128 PNG"""
@@ -484,7 +537,6 @@ def check_scanner_availability():
     """Check and return scanner status"""
     
     if WEBCAM_AVAILABLE:
-        # Test camera
         cap = cv2.VideoCapture(0)
         camera_ok = cap.isOpened()
         cap.release()
@@ -521,13 +573,9 @@ def validate_barcode_format(barcode_id):
     except:
         return False
 
-# ==================== MODULE INFO ====================
-
-print("📦 Barcode Handler Module Loaded")
+print("📦 Barcode Handler Module Loaded (FIXED VERSION)")
 print(f"   Scanner: {'✅ Ready' if WEBCAM_AVAILABLE else '❌ Not Available'}")
 if WEBCAM_AVAILABLE:
     print(f"   Method: {SCANNER_METHOD}")
-    if SCANNER_METHOD == "pyzxing":
-        print(f"   Mode: Online (butuh internet)")
-    print(f"   Preview: Streamlit (400x400 minimum)")
+    print(f"   Detection: ENHANCED (every 2 frames, larger area)")
 print()
