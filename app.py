@@ -653,11 +653,11 @@ def initialize_cart():
 def scan_page():
     """
     Halaman Scan dengan CART SYSTEM
-    User bisa scan multiple produk sebelum checkout
+    FIXED: No recursion - handle scanner return value properly
     """
     initialize_cart()
     
-    # Custom CSS
+    # Custom CSS (same as before)
     st.markdown("""
         <style>
         .scan-header {
@@ -704,12 +704,12 @@ def scan_page():
             border: 2px solid #e0e0e0;
             margin-bottom: 1rem;
             transition: all 0.3s ease;
+            min-height: 600px;
         }
         
         .scan-method-card:hover {
             border-color: #667eea;
             box-shadow: 0 4px 12px rgba(102, 126, 234, 0.2);
-            transform: translateY(-2px);
         }
         
         .product-preview {
@@ -717,6 +717,32 @@ def scan_page():
             padding: 1.5rem;
             border-radius: 12px;
             border-left: 4px solid #667eea;
+            margin-bottom: 1rem;
+        }
+        
+        .scanner-container {
+            min-height: 500px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .status-legend {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-top: 1rem;
+            padding: 0.5rem;
+            background: #f5f7fa;
+            border-radius: 10px;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 0.3rem;
+            font-size: 0.9rem;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -731,7 +757,7 @@ def scan_page():
             <div class="scan-header">
                 <h1>🛒 Scan Multiple Products</h1>
                 <p style="font-size: 1.1rem; margin-top: 0.5rem;">
-                    Scan/input produk → Tambah ke cart → Checkout sekali
+                    Scan berulang → Auto add to cart → Checkout sekali
                 </p>
             </div>
         """, unsafe_allow_html=True)
@@ -753,34 +779,66 @@ def scan_page():
     
     col_method1, col_method2 = st.columns(2)
     
-    # Real-Time Scanner
+    # Real-Time Scanner - FIXED: No recursion
     with col_method1:
         st.markdown("""
             <div class="scan-method-card">
                 <div style="font-size: 2rem; margin-bottom: 0.5rem;">📷</div>
                 <h3 style="color: #667eea;">Real-Time Scanner</h3>
                 <p style="color: #666; font-size: 0.9rem;">
-                    Live preview, auto-detect
+                    400x400 preview | Visual feedback
                 </p>
             </div>
         """, unsafe_allow_html=True)
         
         if availability['available']:
-            if st.button("🚀 Buka Scanner", 
-                        type="primary", 
-                        use_container_width=True,
-                        key="btn_scanner"):
-                with st.spinner("📷 Membuka scanner..."):
-                    result = scan_barcode_realtime()
-                
-                if result['success']:
-                    st.session_state.last_scan = result['barcode_id']
-                    st.success(f"✅ Scan berhasil: {result['barcode_id']}")
-                    st.rerun()
-                else:
-                    st.error(result['message'])
+            st.markdown('<div class="scanner-container">', unsafe_allow_html=True)
+            
+            st.markdown("### 📷 Barcode Scanner")
+            
+            # FIXED: Get barcode data from scanner (no auto-rerun)
+            scanned_barcode = scan_barcode_realtime()
+            
+            # If barcode detected, set it to last_scan
+            if scanned_barcode:
+                st.session_state.last_scan = scanned_barcode
+            
+            # Status legend
+            st.markdown("""
+                <div class="status-legend">
+                    <div class="status-item">
+                        <span style="font-size: 1.5rem;">🔵</span>
+                        <span>Ready</span>
+                    </div>
+                    <div class="status-item">
+                        <span style="font-size: 1.5rem;">🟡</span>
+                        <span>Scanning</span>
+                    </div>
+                    <div class="status-item">
+                        <span style="font-size: 1.5rem;">🟢</span>
+                        <span>Success</span>
+                    </div>
+                </div>
+            """, unsafe_allow_html=True)
+            
+            st.markdown('</div>', unsafe_allow_html=True)
+            
+            st.info("""
+                **💡 Tips:**
+                - Jarak optimal: 10-30cm
+                - Pastikan cahaya cukup
+                - Barcode harus jelas
+                - Tahan steady saat scan
+            """)
+            
         else:
             st.warning("⚠️ Scanner tidak tersedia")
+            st.info("""
+                **Install scanner:**
+                ```bash
+                pip install streamlit-qrcode-scanner==0.1.2
+                ```
+            """)
     
     # Manual Input
     with col_method2:
@@ -794,27 +852,45 @@ def scan_page():
             </div>
         """, unsafe_allow_html=True)
         
-        barcode_input = st.text_input(
-            "Barcode ID",
-            placeholder="BRK001, BRK002, ...",
-            key="manual_input",
-            label_visibility="collapsed"
-        )
-        
-        if st.button("🔍 Cari", 
-                    type="primary", 
-                    use_container_width=True,
-                    key="btn_search"):
-            if barcode_input.strip():
+        with st.form("manual_input_form", clear_on_submit=True):
+            barcode_input = st.text_input(
+                "Barcode ID",
+                placeholder="BRK001, BRK002, ...",
+                key="manual_barcode_input",
+                label_visibility="collapsed"
+            )
+            
+            col_btn1, col_btn2 = st.columns(2)
+            
+            with col_btn1:
+                submit_search = st.form_submit_button("🔍 Cari", use_container_width=True)
+            
+            with col_btn2:
+                submit_add = st.form_submit_button("➕ Add (Qty: 1)", 
+                                                   type="primary",
+                                                   use_container_width=True)
+            
+            if submit_search and barcode_input.strip():
                 st.session_state.last_scan = barcode_input.strip()
                 st.rerun()
-            else:
-                st.warning("⚠️ Masukkan Barcode ID!")
+            
+            if submit_add and barcode_input.strip():
+                product = get_product_by_barcode(barcode_input.strip())
+                if product is not None:
+                    result = add_to_cart(product, 1)
+                    if result['success']:
+                        st.success(result['message'])
+                        time.sleep(0.5)
+                        st.rerun()
+                    else:
+                        st.error(result['message'])
+                else:
+                    st.error(f"❌ Produk tidak ditemukan: {barcode_input.strip()}")
     
-    # === PRODUCT PREVIEW & ADD TO CART ===
+    # === PRODUCT PREVIEW & QUICK ADD ===
     if st.session_state.last_scan:
         st.markdown("---")
-        st.markdown("## 📦 Detail Produk")
+        st.markdown("## 📦 Detail Produk Terakhir Scan")
         
         product = get_product_by_barcode(st.session_state.last_scan)
         
@@ -822,13 +898,21 @@ def scan_page():
             col_preview, col_action = st.columns([2, 1])
             
             with col_preview:
+                cart_qty = 0
+                for item in st.session_state.cart:
+                    if item['barcode_id'] == product['barcode_id']:
+                        cart_qty = item['quantity']
+                        break
+                
+                cart_status = f" | 🛒 Di cart: {cart_qty} pcs" if cart_qty > 0 else ""
+                
                 st.markdown(f"""
                     <div class="product-preview">
                         <h3 style="margin-bottom: 0.5rem;">{product['nama_produk']}</h3>
                         <p style="color: #666; margin-bottom: 1rem;">
                             <strong>Barcode:</strong> {product['barcode_id']} | 
                             <strong>Kategori:</strong> {product['kategori']} | 
-                            <strong>Stok:</strong> {product['stok']} pcs
+                            <strong>Stok:</strong> {product['stok']} pcs{cart_status}
                         </p>
                         <p style="font-size: 1.2rem; color: #4CAF50; font-weight: bold;">
                             {format_currency(product['harga_jual'])} / pcs
@@ -839,7 +923,6 @@ def scan_page():
             with col_action:
                 max_stock = int(product['stok'])
                 
-                # Check cart quantity
                 cart_qty = 0
                 for item in st.session_state.cart:
                     if item['barcode_id'] == product['barcode_id']:
@@ -849,47 +932,87 @@ def scan_page():
                 available = max_stock - cart_qty
                 
                 if available > 0:
+                    st.markdown("#### ⚡ Quick Add")
+                    
+                    col_q1, col_q2 = st.columns(2)
+                    
+                    with col_q1:
+                        if st.button("➕ 1", use_container_width=True, key="quick_add_1"):
+                            result = add_to_cart(product, 1)
+                            if result['success']:
+                                st.success("✅ +1 item")
+                                # Clear last_scan so scanner ready for next
+                                st.session_state.last_scan = None
+                                st.session_state.last_detected_barcode = None
+                                time.sleep(0.3)
+                                st.rerun()
+                            else:
+                                st.error(result['message'])
+                    
+                    with col_q2:
+                        if available >= 5:
+                            if st.button("➕ 5", use_container_width=True, key="quick_add_5"):
+                                result = add_to_cart(product, 5)
+                                if result['success']:
+                                    st.success("✅ +5 items")
+                                    st.session_state.last_scan = None
+                                    st.session_state.last_detected_barcode = None
+                                    time.sleep(0.3)
+                                    st.rerun()
+                    
+                    st.markdown("---")
+                    
                     qty = st.number_input(
-                        "Jumlah",
+                        "Custom Qty",
                         min_value=1,
                         max_value=available,
                         value=1,
-                        key="qty_add",
+                        key="custom_qty_add",
                         help=f"Tersedia: {available} pcs"
                     )
                     
-                    if st.button("➕ Tambah ke Cart", 
+                    if st.button("➕ Add Custom", 
                                 type="primary",
                                 use_container_width=True,
-                                key="btn_add_cart"):
+                                key="btn_add_custom"):
                         result = add_to_cart(product, qty)
                         
                         if result['success']:
                             st.success(result['message'])
                             st.session_state.last_scan = None
+                            st.session_state.last_detected_barcode = None
                             time.sleep(0.5)
                             st.rerun()
                         else:
                             st.error(result['message'])
+                    
+                    st.markdown("---")
+                    
+                    if st.button("🔄 Clear Preview", use_container_width=True):
+                        st.session_state.last_scan = None
+                        st.session_state.last_detected_barcode = None
+                        st.rerun()
+                        
                 else:
                     st.error(f"❌ Stok habis!\n({cart_qty} sudah di cart)")
-                    if st.button("🔄 Cari Produk Lain", use_container_width=True):
+                    if st.button("🔄 Clear", use_container_width=True):
                         st.session_state.last_scan = None
+                        st.session_state.last_detected_barcode = None
                         st.rerun()
         else:
             st.error(f"❌ Produk tidak ditemukan: {st.session_state.last_scan}")
-            if st.button("🔄 Coba Lagi", use_container_width=True):
+            if st.button("🔄 Clear", use_container_width=True):
                 st.session_state.last_scan = None
+                st.session_state.last_detected_barcode = None
                 st.rerun()
     
-    # === SHOPPING CART ===
+    # === SHOPPING CART === (same as before)
     st.markdown("---")
     st.markdown("## 🛒 Shopping Cart")
     
     if st.session_state.cart:
-        # Display cart items
         for idx, item in enumerate(st.session_state.cart):
-            col_item, col_remove = st.columns([5, 1])
+            col_item, col_qty, col_remove = st.columns([4, 1, 1])
             
             with col_item:
                 st.markdown(f"""
@@ -913,6 +1036,18 @@ def scan_page():
                     </div>
                 """, unsafe_allow_html=True)
             
+            with col_qty:
+                st.markdown(f"""
+                    <div style="text-align: center; padding: 1rem 0;">
+                        <div style="font-size: 1.5rem; font-weight: bold; color: #667eea;">
+                            {item['quantity']}
+                        </div>
+                        <div style="font-size: 0.8rem; color: #888;">
+                            pcs
+                        </div>
+                    </div>
+                """, unsafe_allow_html=True)
+            
             with col_remove:
                 if st.button("🗑️", key=f"remove_{idx}", help="Hapus item"):
                     result = remove_from_cart(idx)
@@ -921,7 +1056,6 @@ def scan_page():
                         time.sleep(0.3)
                         st.rerun()
         
-        # Cart Summary
         st.markdown(f"""
             <div class="cart-summary">
                 <h3 style="margin-bottom: 1rem;">💰 Ringkasan Cart</h3>
@@ -950,7 +1084,6 @@ def scan_page():
             </div>
         """, unsafe_allow_html=True)
         
-        # Action buttons
         st.markdown("<br>", unsafe_allow_html=True)
         col_clear, col_checkout = st.columns(2)
         
@@ -959,6 +1092,8 @@ def scan_page():
                         use_container_width=True,
                         key="btn_clear"):
                 result = clear_cart()
+                st.session_state.last_scan = None
+                st.session_state.last_detected_barcode = None
                 st.info(result['message'])
                 time.sleep(0.5)
                 st.rerun()
@@ -974,7 +1109,6 @@ def scan_page():
                 if result['success']:
                     st.success("### ✅ CHECKOUT BERHASIL!")
                     
-                    # Show summary
                     col_s1, col_s2, col_s3, col_s4 = st.columns(4)
                     
                     with col_s1:
@@ -986,6 +1120,9 @@ def scan_page():
                     with col_s4:
                         st.metric("Profit", format_currency(result['total_profit']))
                     
+                    st.session_state.last_scan = None
+                    st.session_state.last_detected_barcode = None
+                    
                     st.balloons()
                     time.sleep(2)
                     st.rerun()
@@ -996,15 +1133,26 @@ def scan_page():
         st.info("""
             ### 🛒 Cart Kosong
             
-            Scan atau input produk untuk mulai berbelanja!
+            **Multiple Scan Mode - Workflow Cepat:**
             
-            **Cara Kerja:**
-            1. Scan/input barcode produk
-            2. Pilih jumlah
-            3. Klik "Tambah ke Cart"
-            4. Ulangi untuk produk lain
-            5. Review cart
-            6. Klik "CHECKOUT" untuk proses semua transaksi
+            1. **Scan Barcode** 📷
+               - Arahkan kamera ke barcode
+               - Produk otomatis terdeteksi
+            
+            2. **Quick Add** ⚡
+               - Klik "+1" untuk tambah 1 item
+               - Klik "+5" untuk tambah 5 items
+               - Atau custom quantity
+            
+            3. **Scan Berikutnya** 🔄
+               - Scanner langsung ready
+               - Scan produk lain
+               - Repeat!
+            
+            4. **Checkout** 💳
+               - Review semua items
+               - Klik "CHECKOUT"
+               - Done! 🎉
         """)
 
 # Laporan page
