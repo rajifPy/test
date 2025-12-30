@@ -307,6 +307,7 @@ if SCANNER_READY:
     print(f"   Method: JavaScript-based (streamlit-qrcode-scanner)")
     print(f"   Preview: 400x400 with visual feedback")
     print(f"   Visual: 🟡 Yellow (scanning) | 🟢 Green (success)")
+    print(f"   FIXED: No recursion loop")
 else:
     print(f"   Install: pip install streamlit-qrcode-scanner==0.1.2")
 print()
