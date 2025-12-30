@@ -1,13 +1,13 @@
 """
-BARCODE HANDLER - FIXED ALL BUGS
-Version: 11.0 - Stable Scanner with Proper State Management
+BARCODE HANDLER - FIXED RECURSION ERROR
+Scanner dengan preview 400x400 dan color feedback
+Version: 10.0 - No Recursion Loop
 """
 
 import barcode
 from barcode.writer import ImageWriter
 import os
 import streamlit as st
-import time
 
 # ==================== LIBRARY DETECTION ====================
 
@@ -40,16 +40,16 @@ else:
 print("=" * 60)
 print()
 
-# ==================== QRCODE SCANNER FUNCTION - FIXED ====================
+# ==================== QRCODE SCANNER FUNCTION ====================
 
 if SCANNER_READY:
     def scan_barcode_realtime():
         """
         Enhanced barcode scanner dengan visual feedback
-        FIXED VERSION - Proper state management & debouncing
+        FIXED: No recursion - return barcode_data instead of rerun
         
         Returns:
-            str or None: barcode data if NEW barcode detected, None otherwise
+            str or None: barcode data if detected, None otherwise
         """
         # Custom CSS untuk scanner area dengan visual feedback
         st.markdown("""
@@ -145,19 +145,13 @@ if SCANNER_READY:
             </style>
         """, unsafe_allow_html=True)
         
-        # Initialize scan state dengan debounce timestamp
+        # Initialize scan state
         if 'scanner_state' not in st.session_state:
             st.session_state.scanner_state = 'waiting'
         
+        # Initialize last detected barcode
         if 'last_detected_barcode' not in st.session_state:
             st.session_state.last_detected_barcode = None
-        
-        if 'last_scan_timestamp' not in st.session_state:
-            st.session_state.last_scan_timestamp = 0
-        
-        # DEBOUNCE: Minimum 2 detik antara scan yang sama
-        DEBOUNCE_SECONDS = 2
-        current_time = time.time()
         
         # Determine frame class based on state
         if st.session_state.scanner_state == 'scanning':
@@ -192,56 +186,27 @@ if SCANNER_READY:
         
         st.markdown('</div>', unsafe_allow_html=True)
         
-        # Process barcode data dengan debouncing
+        # FIXED: Return barcode data instead of calling st.rerun()
         if barcode_data:
-            # Check jika ini barcode BARU atau sudah lewat debounce time
-            is_new_barcode = barcode_data != st.session_state.last_detected_barcode
-            time_since_last_scan = current_time - st.session_state.last_scan_timestamp
-            debounce_passed = time_since_last_scan > DEBOUNCE_SECONDS
-            
-            if is_new_barcode or debounce_passed:
-                # VALID NEW SCAN
+            # Only process if it's a NEW barcode (prevent duplicates)
+            if barcode_data != st.session_state.last_detected_barcode:
                 st.session_state.scanner_state = 'success'
                 st.session_state.last_detected_barcode = barcode_data
-                st.session_state.last_scan_timestamp = current_time
                 
                 # Success feedback
                 st.success(f"✅ **SCAN BERHASIL!**")
                 st.code(barcode_data, language="text")
                 
-                # PENTING: Auto-reset state setelah 3 detik
-                # Ini memungkinkan user scan barcode yang sama lagi nanti
-                if 'success_shown_at' not in st.session_state:
-                    st.session_state.success_shown_at = current_time
-                
-                time_since_success = current_time - st.session_state.success_shown_at
-                
-                if time_since_success > 3:
-                    # Reset state agar bisa scan lagi
-                    st.session_state.scanner_state = 'waiting'
-                    st.session_state.success_shown_at = None
-                
                 # Return the barcode data
                 return barcode_data
             else:
-                # Duplicate scan dalam debounce period - ignore
+                # Same barcode, don't process again
                 st.session_state.scanner_state = 'scanning'
-                
-                if not debounce_passed:
-                    remaining = int(DEBOUNCE_SECONDS - time_since_last_scan)
-                    st.info(f"⏳ Tunggu {remaining} detik untuk scan ulang barcode yang sama")
-                
                 return None
         else:
-            # No barcode detected - set to scanning when camera active
-            if st.session_state.scanner_state == 'success':
-                # Keep success state for a bit
-                time_since_success = current_time - st.session_state.get('success_shown_at', 0)
-                if time_since_success > 3:
-                    st.session_state.scanner_state = 'scanning'
-            else:
+            # Set state to scanning when camera active
+            if st.session_state.scanner_state != 'success':
                 st.session_state.scanner_state = 'scanning'
-            
             return None
 else:
     # Fallback jika library tidak tersedia
@@ -312,8 +277,7 @@ def check_scanner_availability():
     
     if SCANNER_READY:
         message = "✅ Scanner siap: 400x400 preview dengan visual feedback\n" + \
-                 "   🟡 Kuning = Scanning | 🟢 Hijau = Berhasil\n" + \
-                 "   ⏳ Debounce: 2 detik antara scan yang sama"
+                 "   🟡 Kuning = Scanning | 🟢 Hijau = Berhasil"
     else:
         message = "❌ Install: pip install streamlit-qrcode-scanner==0.1.2"
     
@@ -343,8 +307,7 @@ if SCANNER_READY:
     print(f"   Method: JavaScript-based (streamlit-qrcode-scanner)")
     print(f"   Preview: 400x400 with visual feedback")
     print(f"   Visual: 🟡 Yellow (scanning) | 🟢 Green (success)")
-    print(f"   Debounce: 2 seconds between same barcode scans")
-    print(f"   FIXED: Proper state management & auto-reset")
+    print(f"   FIXED: No recursion loop")
 else:
     print(f"   Install: pip install streamlit-qrcode-scanner==0.1.2")
 print()
